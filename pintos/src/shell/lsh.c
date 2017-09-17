@@ -1,4 +1,4 @@
-/* WEEE
+/* WEEE EEEEEEEE
  * Main source code file for lsh shell program
  *
  * You are free to add functions to this file.
