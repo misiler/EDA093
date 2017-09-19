@@ -23,6 +23,8 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "parse.h"
+#include <sys/types.h>
+#include <sys/wait.h>
 
 /*
  * Function declarations
@@ -31,6 +33,7 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void ExecuteCommand(Command *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -68,7 +71,8 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
-	execl("/usr/bin/ls","kjasdhkjh",(char *) 0);
+	ExecuteCommand(&cmd);
+	/*execl("/usr/bin/ls","ls",(char *) 0);*/
       }
     }
     if(line) {
@@ -93,6 +97,30 @@ PrintCommand (int n, Command *cmd)
   printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
+
+void
+ExecuteCommand(Command *cmd)
+{
+printf("%s",(char *) cmd->pgm->pgmlist);
+
+char *argv[2];
+argv[0] = "whoami";
+argv[1] = NULL;
+
+char **pl = p->pgmlist;
+pid_t pid;
+pid = fork();
+if (pid == 0){
+ /*child process*/
+ execvp(*pl, argv);
+ } else if (pid < 0) {
+ /*error forking*/
+ } else {
+ /*parent process*/
+ wait(NULL);
+ }
+}
+
 
 /*
  * Name: PrintPgm
