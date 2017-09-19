@@ -108,13 +108,13 @@ ExecuteCommand(Command *cmd)
 {
 
 char **pl = cmd->pgm->pgmlist;
+printf("%s \n", *pl);
 
-char *argv[2];
-argv[0] = *pl;
-argv[1] = NULL;
+char *argv[3];
+argv[0] = *pl++;
+argv[1] = *pl;
+argv[2] = NULL;
 
-Pgm *p;
-char **pl = p->pgmlist;
 pid_t pid;
 pid = fork();
 if (pid == 0){
