@@ -97,7 +97,12 @@ PrintCommand (int n, Command *cmd)
   printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
-
+/*
+* Name: ExecuteCommand
+*
+* Desc: Executes a given command by searching path.
+*
+*/
 void
 ExecuteCommand(Command *cmd)
 {
@@ -107,6 +112,7 @@ char *argv[2];
 argv[0] = "whoami";
 argv[1] = NULL;
 
+Pgm *p;
 char **pl = p->pgmlist;
 pid_t pid;
 pid = fork();
