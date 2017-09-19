@@ -68,7 +68,7 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
-	execl("/usr/bin/hello","kjasdhkjh",(char *) 0);
+	execl("/usr/bin/ls","kjasdhkjh",(char *) 0);
       }
     }
     if(line) {
