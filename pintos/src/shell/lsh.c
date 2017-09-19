@@ -101,18 +101,18 @@ PrintCommand (int n, Command *cmd)
 void
 ExecuteCommand(Command *cmd)
 {
-printf("%s",(char *) cmd->pgm->pgmlist);
+
+char **pl = cmd->pgm->pgmlist;
 
 char *argv[2];
-argv[0] = "whoami";
+argv[0] = *pl;
 argv[1] = NULL;
 
-char **pl = p->pgmlist;
 pid_t pid;
 pid = fork();
 if (pid == 0){
  /*child process*/
- execvp(*pl, argv);
+ execvp(argv[0], argv);
  } else if (pid < 0) {
  /*error forking*/
  } else {
