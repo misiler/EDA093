@@ -34,9 +34,10 @@ void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
 void ExecuteCommand(Command *);
-
+int SpawnProcess (int, int, char**);
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+int cntCmds = 0; //nof commands entered
 
 /*
  * Name: main
@@ -73,6 +74,8 @@ int main(void)
         PrintCommand(n, &cmd);
 	ExecuteCommand(&cmd);
 	/*execl("/usr/bin/ls","ls",(char *) 0);*/
+	//cleanup:
+	cntCmds = 0;
       }
     }
     if(line) {
@@ -97,37 +100,108 @@ PrintCommand (int n, Command *cmd)
   printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
-/*
-* Name: ExecuteCommand
-*
-* Desc: Executes a given command by searching path.
-*
+/* Name: ExecutePgm
+* Desc: Recursive function to excute.
 */
 void
-ExecuteCommand(Command *cmd)
-{
+ExecutePgm(Pgm *pgm){
 
-char **pl = cmd->pgm->pgmlist;
-printf("%s \n", *pl);
-
+int in = 0;
+int fd[2];
 char *argv[3];
+char *argvtemp[3];
+
+Pgm *pgmtemp = pgm;
+//if(pgm == NULL){
+//	return;
+//} else {
+
+//ExecutePgm(pgm->next);
+
+char **pl = pgm->pgmlist;
 argv[0] = *pl++;
 argv[1] = *pl;
 argv[2] = NULL;
 
-pid_t pid;
+for(int i = 0; i<cntCmds-1; i++){
+//printf("curr: %s \n", *pl);//This row messess up something.
+pgmtemp = pgmtemp->next;
+pl = pgmtemp->pgmlist;
+argvtemp[0] = *pl++;
+argvtemp[1] = *pl;
+argvtemp[2] = NULL;
+
+
+      pipe(fd);
+      /* f [1] is the write end of the pipe, we carry `in` from the prev iteration.  */
+      SpawnProcess(in, fd [1], argvtemp);
+
+      /* No need for the write end of the pipe, the child will write here.  */
+      close (fd [1]);
+
+      /* Keep the read end of the pipe, the next child will read from there.  */
+      in = fd [0];
+
+/*
 pid = fork();
 if (pid == 0){
- /*child process*/
- execvp(argv[0], argv);
- } else if (pid < 0) {
- /*error forking*/
+ //child process
+     execvp(argv[0], argv);
+} else if (pid < 0) {
+ //error forking
  } else {
- /*parent process*/
- wait(NULL);
- }
+ //parent process
+	if (cmd->bakground == 0) {
+  		wait(NULL);
+s 	}
+//cmd->pgm=cmd->pgm->next;
+*/
+//pl = pgm->next->pgmlist; 
+
+}
+if (in != 0){
+    dup2 (in, 0);
+}
+  /* Execute the last stage with the current process. */
+ execvp(argv[0], argv);
+
+//}
+}
+/*
+* Name: ExecuteCommand
+*
+*/
+void
+ExecuteCommand(Command *cmd){
+	ExecutePgm(cmd->pgm);
 }
 
+/*
+* Name: SpawnProcess
+*
+* Desc: Starts a process and open/close the pipe to said process
+*/
+int SpawnProcess (int in, int out, char *argv[3])
+{
+  pid_t pid;
+
+  if ((pid = fork ()) == 0)
+    {
+      if (in != 0)
+        {
+          dup2 (in, 0);
+          close (in);
+        }
+
+      if (out != 1)
+        {
+          dup2 (out, 1);
+          close (out);
+        }
+      return execvp (argv[0], argv);
+    }
+  return pid;
+}
 
 /*
  * Name: PrintPgm
@@ -147,12 +221,14 @@ PrintPgm (Pgm *p)
     /* The list is in reversed order so print
      * it reversed to get right
      */
+    cntCmds++;
     PrintPgm(p->next);
     printf("    [");
     while (*pl) {
       printf("%s ", *pl++);
     }
     printf("]\n");
+
   }
 }
 
