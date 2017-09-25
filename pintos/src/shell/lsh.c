@@ -36,7 +36,7 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-void ExecuteCommand(Command *);
+void ExecuteCommand(Command *, Pgm *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -85,7 +85,7 @@ int main(void)
         } else if (!strcmp(*cmdp->pgm->pgmlist,"exit")) {
           exit(0);
         } else {
-         ExecuteCommand(&cmd);
+         ExecuteCommand(&cmd, cmdp->pgm);
         }
       }
     }
@@ -114,18 +114,30 @@ PrintCommand (int n, Command *cmd)
 *
 */
 void
-ExecuteCommand(Command *cmd)
+ExecuteCommand(Command *cmd, Pgm *p)
 {
-
- Pgm *p = cmd->pgm;
+if(p == NULL){
+        return;
+}else{
  char **pl = p->pgmlist;
+//recursice call:
+ExecuteCommand(cmd, p->next);
 
  pid_t pid;
+ int p[2]; //Pipe, Read=0, Write=1
+ // Create the pipe, with error-checking
+ if (pipe(p) == -1) {
+        fprintf(stderr,"Pipe failed \n");
+        return;
+ }
+
  pid = fork();
  if (pid == 0){
   /*child process*/
   char *argv[20];
   int i = 0;
+  close(p[0]);
+  dup2(p[1],1);
   if (cmd->rstdout != NULL) {
    /*Write to file if > is used*/
    int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
@@ -152,11 +164,14 @@ ExecuteCommand(Command *cmd)
    perror("fork");
   } else {
   /*parent process*/
+  close(p[1]);
+  dup2(p[0],0);
   signal(SIGINT, SIG_IGN);
   if (cmd->bakground == 0) {
    wait(NULL);
   }
  }
+}
 }
 
 /*
