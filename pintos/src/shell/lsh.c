@@ -1,3 +1,4 @@
+
 /* WEEE EEEEEEEE
  * Main source code file for lsh shell program
  *
@@ -25,6 +26,8 @@
 #include "parse.h"
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /*
  * Function declarations
@@ -47,7 +50,12 @@ int done = 0;
 int main(void)
 {
   Command cmd;
+  Command *cmdp;
+  cmdp = &cmd;
   int n;
+  char **pl;
+
+  signal(SIGINT, SIG_IGN);
 
   while (!done) {
 
@@ -71,8 +79,14 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
-	ExecuteCommand(&cmd);
-	/*execl("/usr/bin/ls","ls",(char *) 0);*/
+        pl = cmdp->pgm->pgmlist;
+	if (!strcmp(*pl++, "cd")){
+	  chdir(*pl);
+        } else if (!strcmp(*cmdp->pgm->pgmlist,"exit")) {
+          exit(0);
+        } else {
+         ExecuteCommand(&cmd);
+        }
       }
     }
     if(line) {
@@ -82,12 +96,7 @@ int main(void)
   return 0;
 }
 
-/*
- * Name: PrintCommand
- *
- * Description: Prints a Command structure as returned by parse on stdout.
- *
- */
+
 void
 PrintCommand (int n, Command *cmd)
 {
@@ -97,6 +106,7 @@ PrintCommand (int n, Command *cmd)
   printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
+
 /*
 * Name: ExecuteCommand
 *
@@ -107,27 +117,47 @@ void
 ExecuteCommand(Command *cmd)
 {
 
-char **pl = cmd->pgm->pgmlist;
-printf("%s \n", *pl);
+ Pgm *p = cmd->pgm;
+ char **pl = p->pgmlist;
 
-char *argv[3];
-argv[0] = *pl++;
-argv[1] = *pl;
-argv[2] = NULL;
-
-pid_t pid;
-pid = fork();
-if (pid == 0){
- /*child process*/
- execvp(argv[0], argv);
- } else if (pid < 0) {
- /*error forking*/
- } else {
- /*parent process*/
- wait(NULL);
+ pid_t pid;
+ pid = fork();
+ if (pid == 0){
+  /*child process*/
+  char *argv[20];
+  int i = 0;
+  if (cmd->rstdout != NULL) {
+   /*Write to file if > is used*/
+   int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+   dup2(fd, 1);
+  }
+  if (cmd->rstdin != NULL){
+   //Read from file if < is used
+   int fd2 = open(cmd->rstdin, O_RDONLY);
+   dup2(fd2, 0);
+  }
+  if (cmd->bakground != 0) {
+    signal(SIGINT, SIG_IGN);
+  }
+  //Create argument array and execute
+  while (*pl){
+   argv[i] = *pl++;
+   argv[i+1] = NULL;
+   i++;
+  }
+  execvp(argv[0], argv);
+  i = 0;
+  } else if (pid < 0) {
+   /*error forking*/
+   perror("fork");
+  } else {
+  /*parent process*/
+  signal(SIGINT, SIG_IGN);
+  if (cmd->bakground == 0) {
+   wait(NULL);
+  }
  }
 }
-
 
 /*
  * Name: PrintPgm
