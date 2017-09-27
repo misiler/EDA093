@@ -39,8 +39,11 @@ void stripwhite(char *);
 void ExecuteCommand(Command *, Pgm *);
 
 /* When non-zero, this global means the user is done using this program. */
+//int p[20][2]; //Pipe, Read=0, Write=1
 int done = 0;
-
+int nofCmds = 0;
+int currCmd = 0;
+int p[20][2];//pipe-array, maximum of 20 piped commands.
 /*
  * Name: main
  *
@@ -79,13 +82,16 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
+	currCmd = nofCmds;
         pl = cmdp->pgm->pgmlist;
 	if (!strcmp(*pl++, "cd")){
 	  chdir(*pl);
         } else if (!strcmp(*cmdp->pgm->pgmlist,"exit")) {
           exit(0);
         } else {
+         //CreatePipes();
          ExecuteCommand(&cmd, cmdp->pgm);
+	 nofCmds = 0;
         }
       }
     }
@@ -106,6 +112,98 @@ PrintCommand (int n, Command *cmd)
   printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
+/*void
+CreatePipes()
+{
+ for(int i = nofCmds; i > 1; i--){
+  fprintf(stderr, "Pipe %i created! \n", i);
+  if (pipe(p[i]) == -1) {//Are we piping way to often? Piping every recursive iteration currently
+   fprintf(stderr,"Pipe failed \n");
+   return;
+  }
+ }
+}*/
+void
+ExecutePgm(Command *cmd, Pgm *pgm, int writer, int listener)
+{
+if(pgm == NULL){
+ return;
+}else if (pgm->next != NULL){
+ currCmd--;
+ pid_t pid;
+ if (pipe(p[currCmd]) == -1) {//Error-check
+   fprintf(stderr,"Pipe failed \n");
+   return;
+ }
+ fprintf(stderr, "Pipe %i created! \n", currCmd);
+ pid = fork();
+ if (pid == 0){
+   //Child process
+   fprintf(stderr,"NofCmds: %i \n", nofCmds);
+   fprintf(stderr,"CurrCmd: %i \n", currCmd);
+   if(currCmd > 1 && currCmd != nofCmds){
+    ExecutePgm(cmd, pgm->next, 1, 1);
+   } else {
+    ExecutePgm(cmd, pgm->next, 1, 0);
+   }
+  } else if (pid < 0) {
+   /*error forking*/
+   perror("fork");
+  } else {
+   /*parent process*/
+   wait(NULL);
+  }
+}
+
+if(writer == 1 && listener == 0){//First command
+   fprintf(stderr, "Writer. \n");
+   dup2(p[2][1],1);
+   close(p[2][0]);
+   close(p[2][1]);
+   if (cmd->rstdin != NULL){
+    //Read from file if < is used
+    int fd2 = open(cmd->rstdin, O_RDONLY);
+    dup2(fd2, 0);
+   }
+   if (cmd->bakground != 0) {
+     signal(SIGINT, SIG_IGN);
+   }
+
+} else if(writer == 0 && listener == 1){//Last command
+   fprintf(stderr, "Listener. \n");
+   dup2(p[1][0],0);
+   close(p[1][1]);
+   close(p[1][0]);
+   if (cmd->rstdout != NULL) {
+    //Write to file if > is used
+    int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    dup2(fd, 1);
+   }
+
+} else if(writer == 1 && listener == 1){//middle command
+   fprintf(stderr, "Listener & writer. \n");
+   dup2(p[2][0],0);
+   dup2(p[1][1],1);
+   close(p[2][1]);
+   close(p[2][0]);
+   close(p[1][0]);
+   close(p[1][1]);
+}
+  //Execution stage:
+  char **pl = pgm->pgmlist;
+  char *argv[20];
+  int i = 0;
+  //Create argument array and execute
+  while (*pl){
+   argv[i] = *pl++;
+   argv[i+1] = NULL;
+   i++;
+  }
+  i = 0;
+  fprintf(stderr, "Executing: %s. \n", argv[0]);
+  execvp(argv[0], argv);
+// }//else-clause
+}
 
 /*
 * Name: ExecuteCommand
@@ -114,64 +212,28 @@ PrintCommand (int n, Command *cmd)
 *
 */
 void
-ExecuteCommand(Command *cmd, Pgm *p)
+ExecuteCommand(Command *cmd, Pgm *pgm)
 {
-if(p == NULL){
-        return;
-}else{
- char **pl = p->pgmlist;
-//recursice call:
-ExecuteCommand(cmd, p->next);
-
  pid_t pid;
- int p[2]; //Pipe, Read=0, Write=1
- // Create the pipe, with error-checking
- if (pipe(p) == -1) {
-        fprintf(stderr,"Pipe failed \n");
-        return;
- }
-
  pid = fork();
  if (pid == 0){
-  /*child process*/
-  char *argv[20];
-  int i = 0;
-  close(p[0]);
-  dup2(p[1],1);
-  if (cmd->rstdout != NULL) {
-   /*Write to file if > is used*/
-   int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-   dup2(fd, 1);
-  }
-  if (cmd->rstdin != NULL){
-   //Read from file if < is used
-   int fd2 = open(cmd->rstdin, O_RDONLY);
-   dup2(fd2, 0);
-  }
-  if (cmd->bakground != 0) {
-    signal(SIGINT, SIG_IGN);
-  }
-  //Create argument array and execute
-  while (*pl){
-   argv[i] = *pl++;
-   argv[i+1] = NULL;
-   i++;
-  }
-  execvp(argv[0], argv);
-  i = 0;
+   if (nofCmds > 1){//start piping
+   ExecutePgm(cmd, pgm, 0, 1);
+   }else{
+   ExecutePgm(cmd, pgm, 0, 0);
+   }
   } else if (pid < 0) {
    /*error forking*/
    perror("fork");
   } else {
   /*parent process*/
-  close(p[1]);
-  dup2(p[0],0);
+  //close(p[1]);
+  //close(p[0]);
   signal(SIGINT, SIG_IGN);
   if (cmd->bakground == 0) {
    wait(NULL);
   }
  }
-}
 }
 
 /*
@@ -198,6 +260,7 @@ PrintPgm (Pgm *p)
       printf("%s ", *pl++);
     }
     printf("]\n");
+    nofCmds++;
   }
 }
 
