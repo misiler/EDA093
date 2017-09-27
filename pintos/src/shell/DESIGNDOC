@@ -20,6 +20,10 @@ Row 383 - 416 in
 https://github.com/jmreyes/simple-c-shell/blob/master/simple-c-shell.c 
 helped us understand on how to use dups.
 
+We used "Bash on ubuntu on windows", a built in linux shell in windows:
+https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/
+which worked well and had good performance.
+
 
 			   COMMAND SHELL
 			   =============
