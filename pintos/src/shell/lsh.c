@@ -157,9 +157,9 @@ if(pgm == NULL){
 
 if(writer == 1 && listener == 0){//First command
    fprintf(stderr, "Writer. \n");
-   dup2(p[2][1],1);
-   close(p[2][0]);
-   close(p[2][1]);
+   dup2(p[1][1],1);
+   close(p[1][0]);
+   close(p[1][1]);
    if (cmd->rstdin != NULL){
     //Read from file if < is used
     int fd2 = open(cmd->rstdin, O_RDONLY);
@@ -171,9 +171,9 @@ if(writer == 1 && listener == 0){//First command
 
 } else if(writer == 0 && listener == 1){//Last command
    fprintf(stderr, "Listener. \n");
-   dup2(p[1][0],0);
-   close(p[1][1]);
-   close(p[1][0]);
+   dup2(p[2][0],0);
+   close(p[2][1]);
+   close(p[2][0]);
    if (cmd->rstdout != NULL) {
     //Write to file if > is used
     int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
@@ -182,8 +182,8 @@ if(writer == 1 && listener == 0){//First command
 
 } else if(writer == 1 && listener == 1){//middle command
    fprintf(stderr, "Listener & writer. \n");
-   dup2(p[2][0],0);
-   dup2(p[1][1],1);
+   dup2(p[1][0],0);
+   dup2(p[2][1],1);
    close(p[2][1]);
    close(p[2][0]);
    close(p[1][0]);
