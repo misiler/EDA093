@@ -33,13 +33,11 @@
  * Function declarations
  */
 
-void PrintCommand(int, Command *);
-void PrintPgm(Pgm *);
+void countPgm(Pgm *);
 void stripwhite(char *);
 void ExecuteCommand(Command *, Pgm *);
 
 /* When non-zero, this global means the user is done using this program. */
-//int p[20][2]; //Pipe, Read=0, Write=1
 int done = 0;
 int nofCmds = 0;
 int currCmd = 0;
@@ -54,95 +52,76 @@ int p[20][2];//pipe-array, maximum of 20 piped commands.
 
 int main(void)
 {
-  Command cmd;
-  Command *cmdp;
-  cmdp = &cmd;
-  int n;
-  char **pl;
-
-  signal(SIGINT, SIG_IGN);
-
-  while (!done) {
-
-    char *line;
-    line = readline("> ");
-
-    if (!line) {
-      /* Encountered EOF at top level */
-      done = 1;
+ Command cmd;
+ Command *cmdp;
+ cmdp = &cmd;
+ int n;
+ char **pl;
+ signal(SIGINT, SIG_IGN);
+ while (!done) {
+  char *line;
+  line = readline("> ");
+  if (!line) {
+   /* Encountered EOF at top level */
+   done = 1;
+  } else {
+   /*
+    * Remove leading and trailing whitespace from the line
+    * Then, if there is anything left, add it to the history list
+    * and execute it.
+    */
+   stripwhite(line);
+   if(*line) {
+    add_history(line);
+    /* execute it */
+    n = parse(line, &cmd);
+    countPgm(cmdp->pgm);
+    currCmd = nofCmds;
+    pl = cmdp->pgm->pgmlist;
+    if (!strcmp(*pl++, "cd")){
+     chdir(*pl);
+    } else if (!strcmp(*cmdp->pgm->pgmlist,"exit")) {
+     exit(0);
+    } else {
+     //CreatePipes();
+     ExecuteCommand(&cmd, cmdp->pgm);
+     nofCmds = 0;
     }
-    else {
-      /*
-       * Remove leading and trailing whitespace from the line
-       * Then, if there is anything left, add it to the history list
-       * and execute it.
-       */
-      stripwhite(line);
-
-      if(*line) {
-        add_history(line);
-        /* execute it */
-        n = parse(line, &cmd);
-        PrintCommand(n, &cmd);
-	currCmd = nofCmds;
-        pl = cmdp->pgm->pgmlist;
-	if (!strcmp(*pl++, "cd")){
-	  chdir(*pl);
-        } else if (!strcmp(*cmdp->pgm->pgmlist,"exit")) {
-          exit(0);
-        } else {
-         //CreatePipes();
-         ExecuteCommand(&cmd, cmdp->pgm);
-	 nofCmds = 0;
-        }
-      }
-    }
-    if(line) {
-      free(line);
-    }
+   }
   }
-  return 0;
-}
-
-
-void
-PrintCommand (int n, Command *cmd)
-{
-  printf("Parse returned %d:\n", n);
-  printf("   stdin : %s\n", cmd->rstdin  ? cmd->rstdin  : "<none>" );
-  printf("   stdout: %s\n", cmd->rstdout ? cmd->rstdout : "<none>" );
-  printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
-  PrintPgm(cmd->pgm);
-}
-/*void
-CreatePipes()
-{
- for(int i = nofCmds; i > 1; i--){
-  fprintf(stderr, "Pipe %i created! \n", i);
-  if (pipe(p[i]) == -1) {//Are we piping way to often? Piping every recursive iteration currently
-   fprintf(stderr,"Pipe failed \n");
-   return;
+  if(line) {
+   free(line);
   }
  }
-}*/
+ return 0;
+}
+
+
+/*
+ *Name: ExecutePgm
+ *
+ *Desc: Executes programs, is called by a child process and forks more children
+ *and creates pipes between them if nessesary
+ *
+*/
 void
 ExecutePgm(Command *cmd, Pgm *pgm, int writer, int listener)
 {
-if(pgm == NULL){
- return;
-}else if (pgm->next != NULL){
- currCmd--;
- pid_t pid;
- if (pipe(p[currCmd]) == -1) {//Error-check
-   fprintf(stderr,"Pipe failed \n");
+
+ if(pgm == NULL){
+  return;
+ }else if (pgm->next != NULL){
+  currCmd--;
+  pid_t pid;
+  if (pipe(p[currCmd]) == -1) {//Error-check
+   //Creates a pipe
    return;
- }
- fprintf(stderr, "Pipe %i created! \n", currCmd);
- pid = fork();
- if (pid == 0){
+  }
+  //forks a "grandchild" of lsh
+  pid = fork();
+  if (pid == 0){
    //Child process
-   fprintf(stderr,"NofCmds: %i \n", nofCmds);
-   fprintf(stderr,"CurrCmd: %i \n", currCmd);
+   //Recursive calls if not last remaning (or only) command
    if(currCmd > 1 && currCmd != nofCmds){
     ExecutePgm(cmd, pgm->next, 1, 1);
    } else {
@@ -155,56 +134,65 @@ if(pgm == NULL){
    /*parent process*/
    wait(NULL);
   }
-}
+ }
 
-if(writer == 1 && listener == 0){//First command
-   fprintf(stderr, "Writer. \n");
-   dup2(p[currCmd][1],1);
-   close(p[currCmd][0]);
-   close(p[currCmd][1]);
-   if (cmd->rstdin != NULL){
-    //Read from file if < is used
-    int fd2 = open(cmd->rstdin, O_RDONLY);
-    dup2(fd2, 0);
-   }
-   if (cmd->bakground != 0) {
-     signal(SIGINT, SIG_IGN);
-   }
-
-} else if(writer == 0 && listener == 1){//Last command
-   fprintf(stderr, "Listener. \n");
-   dup2(p[currCmd][0],0);
+ //First command
+ if (writer == 1 && listener == 0) {
+  dup2(p[currCmd][1],1); // output to pipe
+  close(p[currCmd][0]);
+  close(p[currCmd][1]);
+  if (cmd->rstdin != NULL){
+   //Read from file if < is used
+   int fd2 = open(cmd->rstdin, O_RDONLY);
+   dup2(fd2, 0);
+   close(fd2);
+  }
+  if (cmd->bakground != 0) {
+   signal(SIGINT, SIG_IGN);
+  }
+ //Last command
+ } else if (writer == 0 && listener == 1) {
+   dup2(p[currCmd][0],0); // take input from pipe
    close(p[currCmd][1]);
    close(p[currCmd][0]);
    if (cmd->rstdout != NULL) {
     //Write to file if > is used
     int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     dup2(fd, 1);
+    close(fd);
    }
-
-} else if(writer == 1 && listener == 1){//middle command
-   fprintf(stderr, "Listener & writer. \n");
-   dup2(p[currCmd][0],0);
-   dup2(p[currCmd+1][1],1);
+ //Middle command
+ } else if(writer == 1 && listener == 1){
+   dup2(p[currCmd][0],0); // take input from pipe
+   dup2(p[currCmd+1][1],1); // send output to next pipe
    close(p[currCmd+1][1]);
    close(p[currCmd+1][0]);
    close(p[currCmd][0]);
    close(p[currCmd][1]);
-}
-  //Execution stage:
-  char **pl = pgm->pgmlist;
-  char *argv[20];
-  int i = 0;
-  //Create argument array and execute
-  while (*pl){
-   argv[i] = *pl++;
-   argv[i+1] = NULL;
-   i++;
-  }
-  i = 0;
-  fprintf(stderr, "Executing: %s. \n", argv[0]);
-  execvp(argv[0], argv);
-// }//else-clause
+ } else { //if no piping occurs we may still need file IO
+   if (cmd-> rstdout != NULL) {
+    int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    dup2(fd, 1);
+    close(fd);
+   }
+   if (cmd-> rstdin != NULL) {
+    int fd2 = open(cmd->rstdin, O_RDONLY);
+    dup2(fd2, 0);
+    close(fd2);
+   }
+ }
+ //Execution stage:
+ char **pl = pgm->pgmlist;
+ char *argv[20];
+ int i = 0;
+ //Create argument array and execute
+ while (*pl){
+  argv[i] = *pl++;
+  argv[i+1] = NULL;
+  i++;
+ }
+ i = 0;
+ execvp(argv[0], argv);
 }
 
 /*
@@ -219,7 +207,7 @@ ExecuteCommand(Command *cmd, Pgm *pgm)
  pid_t pid;
  pid = fork();
  if (pid == 0){
-   if (nofCmds > 1){//start piping
+   if (nofCmds > 1){//start piping and forking more children if more than 1 command is used
    ExecutePgm(cmd, pgm, 0, 1);
    }else{
    ExecutePgm(cmd, pgm, 0, 0);
@@ -229,8 +217,6 @@ ExecuteCommand(Command *cmd, Pgm *pgm)
    perror("fork");
   } else {
   /*parent process*/
-  //close(p[1]);
-  //close(p[0]);
   signal(SIGINT, SIG_IGN);
   if (cmd->bakground == 0) {
    wait(NULL);
@@ -239,31 +225,19 @@ ExecuteCommand(Command *cmd, Pgm *pgm)
 }
 
 /*
- * Name: PrintPgm
+ *Name: countPgm
  *
- * Description: Prints a list of Pgm:s
+ *Desc: counts how many commands that are to be executed
  *
  */
 void
-PrintPgm (Pgm *p)
-{
-  if (p == NULL) {
-    return;
-  }
-  else {
-    char **pl = p->pgmlist;
-
-    /* The list is in reversed order so print
-     * it reversed to get right
-     */
-    PrintPgm(p->next);
-    printf("    [");
-    while (*pl) {
-      printf("%s ", *pl++);
-    }
-    printf("]\n");
-    nofCmds++;
-  }
+countPgm(Pgm *p){
+ if (p == NULL) {
+  return;
+ } else {
+ countPgm(p->next);
+ nofCmds++;
+ }
 }
 
 /*
