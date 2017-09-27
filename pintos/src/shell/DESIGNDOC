@@ -6,34 +6,41 @@
 
 ---- GROUP ----
 
->> Fill in the names and email addresses of your group members.
+Group: A4
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Johannes Arvidsson joharv@student.chalmers.se
+Rasmus Söderström Olsson rasolss@student.chalmers.se
 
 ---- PRELIMINARIES ----
 
->> If you have any preliminary comments on your submission, notes for the
->> TAs, or extra credit, please include them here.
+We used stackoverflow.com alot, mostly due our lack of programming skills 
+within recursive functions and linked lists.
 
->> Please cite any offline or online sources you consulted while
->> preparing your submission, other than the Pintos documentation, course
->> text, lecture notes, and course instructors.
+Row 383 - 416 in
+https://github.com/jmreyes/simple-c-shell/blob/master/simple-c-shell.c 
+helped us understand on how to use dups.
+
 
 			   COMMAND SHELL
 			   =============
 
 ---- LOGISTICS ----
 
-These questions will help us to keep track of the difficulty level of
-assignments, as well as keeping track of which team members worked on
-which parts.
-
 >> L1: How many hours did each team member spend on this assignment?
    Make sure that each member's total time is listed.
 
+34 hours each.
+
+Yes, we know this is a lot, but we had to learn alot of programming throughout
+since we chose the course whitout really fulfilling all requirements in programming.
+
+
 >> L2: What did each team member focus on for this assignment?  Keep
    descriptions to 25-30 words or less.
+
+Johannes solved most of the tasks while Rasmus strugged with 
+the pipes. After approximately 9 h each, all remaining hours where spent on the pipes together.
+
 
 
 			  SURVEY QUESTIONS
@@ -48,18 +55,39 @@ penalized.  We can't fix things until we know about them.  :-)
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
 
+Pipes was hard. Especially combined with recursion and the linked list.
+
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
+Forking and piping.
+
 >> Were there any parts of the assignment that you felt were unnecessarily
 >> tedious or pointless?
+
+Piping could have gone much faster if a flow chart of the relationship between
+parents, children and grand-children was avaiable.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
+A flow chart to understand that some parts (i.e. the parent with the shell)
+must not be recursively called.
+
 >> Do you have any suggestions for the instructor and/or TAs to more
 >> effectively assist students, either for future quarters or the remaining
 >> projects?
 
+The specifications should be clearer, for example test with multiple pipes.
+
+"are provided" differs quite a bit from "you should provide" in slide 11.
+
 >> Any other comments?
+
+Would have been great with a consulting session closer to the end. We weren't 
+stuck in the beginning and therefore we had no questions.
+
+
+
