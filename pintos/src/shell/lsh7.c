@@ -1,3 +1,4 @@
+
 /* WEEE EEEEEEEE
  * Main source code file for lsh shell program
  *
@@ -25,6 +26,8 @@
 #include "parse.h"
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /*
  * Function declarations
@@ -33,11 +36,15 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-void ExecuteCommand(Command *);
+void ExecuteCommand(Command *, Pgm *);
+void CreatePipes();
 
 /* When non-zero, this global means the user is done using this program. */
+//int p[20][2]; //Pipe, Read=0, Write=1
 int done = 0;
-
+int nofCmds = 0;
+int currCmd = 0;
+int p[2];
 /*
  * Name: main
  *
@@ -47,7 +54,12 @@ int done = 0;
 int main(void)
 {
   Command cmd;
+  Command *cmdp;
+  cmdp = &cmd;
   int n;
+  char **pl;
+
+  signal(SIGINT, SIG_IGN);
 
   while (!done) {
 
@@ -71,7 +83,17 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
-	ExecuteCommand(&cmd);
+	currCmd = nofCmds;
+        pl = cmdp->pgm->pgmlist;
+	if (!strcmp(*pl++, "cd")){
+	  chdir(*pl);
+        } else if (!strcmp(*cmdp->pgm->pgmlist,"exit")) {
+          exit(0);
+        } else {
+         //CreatePipes();
+         ExecuteCommand(&cmd, cmdp->pgm);
+	 nofCmds = 0;
+        }
       }
     }
     if(line) {
@@ -81,12 +103,7 @@ int main(void)
   return 0;
 }
 
-/*
- * Name: PrintCommand
- *
- * Description: Prints a Command structure as returned by parse on stdout.
- *
- */
+
 void
 PrintCommand (int n, Command *cmd)
 {
@@ -96,74 +113,116 @@ PrintCommand (int n, Command *cmd)
   printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
-
-
-
-/*
-* Name: ExecutePgm
-* Desc: Executes a given pgm, recurisively iterates over the linked list..
-*/
+/*void
+CreatePipes()
+{
+ for(int i = nofCmds; i > 1; i--){
+  fprintf(stderr, "Pipe %i created! \n", i);
+  if (pipe(p[i]) == -1) {//Are we piping way to often? Piping every recursive iteration currently
+   fprintf(stderr,"Pipe failed \n");
+   return;
+  }
+ }
+}*/
 void
-ExecutePgm(Pgm *pgm)
+ExecutePgm(Command *cmd, Pgm *pgm, int writer, int listener)
 {
 if(pgm == NULL){
-	return;
-}else{
-char **pl = pgm->pgmlist;
-
-//recursive call:
-ExecutePgm(pgm->next);
-
-pid_t pid;
-int p[2]; //Read=0, Write=1
-char *argv[3];
-
-argv[0] = *pl++;
-argv[1] = *pl;
-argv[2] = NULL;
-
-
-
-// Create the pipe, with error-checking
-if (pipe(p) == -1) {
-	fprintf(stderr,"Pipe failed \n");
-	return;
+ return;
+}else if (pgm->next != NULL){
+ pid_t pid;
+ pipe(p);
+ pid = fork();
+ if (pid == 0){
+   //Child process
+   ExecutePgm(cmd, pgm->next, 1, 0);
+  } else if (pid < 0) {
+   /*error forking*/
+   perror("fork");
+  } else {
+  /*parent process*/
+   wait(NULL);
+  }
 }
 
-printf("...%s... \n", argv[0]);
+if(writer == 1 && listener == 0){//First command
+   fprintf(stderr, "Writer. \n");
+   dup2(p[1],1);
+   close(p[0]);
+   close(p[1]);
+   if (cmd->rstdin != NULL){
+    //Read from file if < is used
+    int fd2 = open(cmd->rstdin, O_RDONLY);
+    dup2(fd2, 0);
+   }
+   if (cmd->bakground != 0) {
+     signal(SIGINT, SIG_IGN);
+   }
 
-pid = fork();
+} else if(writer == 0 && listener == 1){//Last command
+   fprintf(stderr, "Listener. \n");
+   dup2(p[0],0);
+   close(p[1]);
+   close(p[0]);
+   if (cmd->rstdout != NULL) {
+    //Write to file if > is used
+    int fd = open(cmd->rstdout, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    dup2(fd, 1);
+   }
 
-if (pid == 0){
- /*child process*/
-	close(p[0]);
-	dup2(p[1],1);
-	//printf("Test, debug. \n");
-        execvp(argv[0], argv);
- } else if (pid < 0) {
- 	/*error forking*/
-	fprintf(stderr, "Fork failed \n");
-	return;
- } else {
- /*parent process*/
-	close(p[1]);
-	dup2(p[0],0);
-	wait(NULL);
- }
+} else if(writer == 1 && listener == 1){//middle command
+   fprintf(stderr, "Listener & writer. \n");
+   dup2(p[0],0);
+   dup2(p[1],1);
+   close(p[1]);
+   close(p[0]);
 }
-//return;
+  //Execution stage:
+  char **pl = pgm->pgmlist;
+  char *argv[20];
+  int i = 0;
+  //Create argument array and execute
+  while (*pl){
+   argv[i] = *pl++;
+   argv[i+1] = NULL;
+   i++;
+  }
+  i = 0;
+  fprintf(stderr, "Executing: %s. \n", argv[0]);
+  execvp(argv[0], argv);
+// }//else-clause
 }
+
 /*
 * Name: ExecuteCommand
+*
 * Desc: Executes a given command by searching path.
+*
 */
 void
-ExecuteCommand(Command *cmd)
+ExecuteCommand(Command *cmd, Pgm *pgm)
 {
-//ExecuteCommand(cmd->pgm->next);
-ExecutePgm(cmd->pgm);
+ pid_t pid;
+ pid = fork();
+ if (pid == 0){
+   if (nofCmds > 1){//start piping
+   ExecutePgm(cmd, pgm, 0, 1);
+   }else{
+   ExecutePgm(cmd, pgm, 0, 0);
+   }
+  } else if (pid < 0) {
+   /*error forking*/
+   perror("fork");
+  } else {
+  /*parent process*/
+  //close(p[1]);
+  //close(p[0]);
+  signal(SIGINT, SIG_IGN);
+  if (cmd->bakground == 0) {
+   wait(NULL);
+  }
+ }
 }
-
 
 /*
  * Name: PrintPgm
@@ -189,6 +248,7 @@ PrintPgm (Pgm *p)
       printf("%s ", *pl++);
     }
     printf("]\n");
+    nofCmds++;
   }
 }
 
